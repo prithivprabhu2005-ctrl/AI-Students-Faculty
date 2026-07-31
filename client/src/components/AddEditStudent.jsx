@@ -1,0 +1,432 @@
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import Spinner from './Spinner';
+import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
+
+const AddEditStudent = ({ mode = 'admin' }) => {
+  const navigate = useNavigate();
+  const { id: editingStudentId } = useParams();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [formData, setFormData] = useState({
+    studentId: '',
+    registerNumber: '',
+    name: '',
+    gender: 'Male',
+    department: 'CSE',
+    batchYear: 2023,
+    academicYear: 2,
+    semester: 3,
+    section: 'A',
+    dob: '',
+    phone: '',
+    email: '',
+    address: '',
+    marks: {
+      english: { internal: 0, external: 0 },
+      mathematics: { internal: 0, external: 0 },
+      programming: { internal: 0, external: 0 },
+      database: { internal: 0, external: 0 },
+      operatingSystems: { internal: 0, external: 0 },
+      computerNetworks: { internal: 0, external: 0 }
+    }
+  });
+
+  const departments = ['CSE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT', 'AI&DS'];
+  const isFacultyMode = mode === 'faculty';
+  const isEditing = Boolean(editingStudentId);
+  const subjects = [
+    { key: 'english', label: 'English' },
+    { key: 'mathematics', label: 'Mathematics' },
+    { key: 'programming', label: 'Programming' },
+    { key: 'database', label: 'Database' },
+    { key: 'operatingSystems', label: 'Operating Systems' },
+    { key: 'computerNetworks', label: 'Computer Networks' }
+  ];
+
+  useEffect(() => {
+    if (editingStudentId) {
+      const fetchStudentDetails = async () => {
+        try {
+          setFetching(true);
+          const response = await api.get(`/students/${editingStudentId}`);
+          const student = response.data;
+          
+          // Format dob string to YYYY-MM-DD for date input
+          const formattedDob = student.dob ? new Date(student.dob).toISOString().split('T')[0] : '';
+          
+          setFormData({
+            studentId: student.studentId || '',
+            registerNumber: student.registerNumber || '',
+            name: student.name || '',
+            gender: student.gender || 'Male',
+            department: student.department || 'CSE',
+            batchYear: student.batchYear || 2023,
+            academicYear: student.academicYear || 2,
+            semester: student.semester || 3,
+            section: student.section || 'A',
+            dob: formattedDob,
+            phone: student.phone || '',
+            email: student.email || '',
+            address: student.address || '',
+            marks: {
+              english: { internal: student.marks.english.internal, external: student.marks.english.external },
+              mathematics: { internal: student.marks.mathematics.internal, external: student.marks.mathematics.external },
+              programming: { internal: student.marks.programming.internal, external: student.marks.programming.external },
+              database: { internal: student.marks.database.internal, external: student.marks.database.external },
+              operatingSystems: { internal: student.marks.operatingSystems.internal, external: student.marks.operatingSystems.external },
+              computerNetworks: { internal: student.marks.computerNetworks.internal, external: student.marks.computerNetworks.external }
+            }
+          });
+        } catch (err) {
+          console.error('Error fetching student details:', err);
+          alert('Failed to load student details for editing.');
+          navigate(isFacultyMode ? '/faculty/students' : '/admin/students');
+        } finally {
+          setFetching(false);
+        }
+      };
+
+      fetchStudentDetails();
+    }
+  }, [editingStudentId, isFacultyMode, navigate]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'batchYear' || name === 'academicYear' || name === 'semester' 
+        ? Number(value) 
+        : value
+    }));
+  };
+
+  const handleMarkChange = (subjectKey, type, value) => {
+    const numericVal = Math.min(type === 'internal' ? 40 : 60, Math.max(0, Number(value) || 0));
+    setFormData(prev => ({
+      ...prev,
+      marks: {
+        ...prev.marks,
+        [subjectKey]: {
+          ...prev.marks[subjectKey],
+          [type]: numericVal
+        }
+      }
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      if (editingStudentId) {
+        const payload = isFacultyMode ? { marks: formData.marks } : formData;
+        await api.put(`/students/${editingStudentId}`, payload);
+        alert(isFacultyMode ? 'Student marks updated successfully!' : 'Student details updated successfully!');
+      } else {
+        await api.post('/students', formData);
+        alert('Student added successfully!');
+      }
+      navigate(isFacultyMode ? '/faculty/students' : '/admin/students');
+    } catch (err) {
+      console.error('Error submitting form:', err);
+      alert(err.response?.data?.message || 'An error occurred while saving student.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (fetching) return <Spinner />;
+
+  return (
+    <div className="dashboard-section-card">
+      <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ fontSize: '1.5rem' }}>
+          {isFacultyMode
+            ? 'Update Student Marks'
+            : editingStudentId
+              ? 'Edit Student Details'
+              : 'Add New Student Record'}
+        </h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+          {isFacultyMode
+            ? `Update marks for students in ${user?.department}. Grades and ranks will be recalculated automatically.`
+            : 'Fill in student info and marks. Grades and ranks will be calculated automatically.'}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="form-container">
+        {/* Section 1: Personal Information */}
+        {!isFacultyMode && (
+        <div className="form-grid">
+          <div className="form-section-title">Personal Details</div>
+
+          <div className="form-group">
+            <label htmlFor="studentId">Student ID {editingStudentId ? '' : '(Auto-generated)'}</label>
+            <input
+              type="text"
+              id="studentId"
+              name="studentId"
+              className="form-control"
+              value={formData.studentId}
+              onChange={handleChange}
+              placeholder={editingStudentId ? 'e.g. STU001' : 'Auto-generated (e.g. STU001)'}
+              disabled={!editingStudentId && false}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="registerNumber">Register Number (e.g. 23CSE102)</label>
+            <input
+              type="text"
+              id="registerNumber"
+              name="registerNumber"
+              className="form-control"
+              required
+              disabled={!!editingStudentId}
+              value={formData.registerNumber}
+              onChange={handleChange}
+              placeholder="e.g. 23CSE102"
+              style={{ textTransform: 'uppercase' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="name">Full Name</label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              className="form-control"
+              required
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="e.g. Arun Kumar"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="gender">Gender</label>
+            <select
+              id="gender"
+              name="gender"
+              className="filter-select"
+              value={formData.gender}
+              onChange={handleChange}
+            >
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="department">Department</label>
+            <select
+              id="department"
+              name="department"
+              className="filter-select"
+              value={formData.department}
+              onChange={handleChange}
+            >
+              {departments.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="batchYear">Batch Year</label>
+            <input
+              type="number"
+              id="batchYear"
+              name="batchYear"
+              className="form-control"
+              required
+              value={formData.batchYear}
+              onChange={handleChange}
+              placeholder="e.g. 2023"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="academicYear">Academic Year</label>
+            <input
+              type="number"
+              id="academicYear"
+              name="academicYear"
+              className="form-control"
+              required
+              min="1"
+              max="4"
+              value={formData.academicYear}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="semester">Semester</label>
+            <input
+              type="number"
+              id="semester"
+              name="semester"
+              className="form-control"
+              required
+              min="1"
+              max="8"
+              value={formData.semester}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="section">Section</label>
+            <input
+              type="text"
+              id="section"
+              name="section"
+              className="form-control"
+              required
+              value={formData.section}
+              onChange={handleChange}
+              placeholder="e.g. A"
+              style={{ textTransform: 'uppercase' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="dob">Date of Birth</label>
+            <input
+              type="date"
+              id="dob"
+              name="dob"
+              className="form-control"
+              required
+              value={formData.dob}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="phone">Phone Number</label>
+            <input
+              type="tel"
+              id="phone"
+              name="phone"
+              className="form-control"
+              required
+              value={formData.phone}
+              onChange={handleChange}
+              placeholder="e.g. 9840123456"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="email">Email Address</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              className="form-control"
+              required
+              value={formData.email}
+              onChange={handleChange}
+              placeholder="e.g. arun.kumar@college.edu"
+            />
+          </div>
+
+          <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <label htmlFor="address">Address</label>
+            <input
+              type="text"
+              id="address"
+              name="address"
+              className="form-control"
+              required
+              value={formData.address}
+              onChange={handleChange}
+              placeholder="e.g. 12, Anna Salai, Chennai - 600010"
+            />
+          </div>
+        </div>
+        )}
+
+        {/* Section 2: Subject Marks */}
+        <div>
+          <div className="form-section-title">Academic Subject Marks</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+            {subjects.map(subject => (
+              <div
+                key={subject.key}
+                style={{
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem'
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--primary)' }}>{subject.label}</div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>Internal (max 40)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="40"
+                      className="form-control"
+                      value={formData.marks[subject.key].internal}
+                      onChange={(e) => handleMarkChange(subject.key, 'internal', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>External (max 60)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="60"
+                      className="form-control"
+                      value={formData.marks[subject.key].external}
+                      onChange={(e) => handleMarkChange(subject.key, 'external', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Subtotal: <b>{formData.marks[subject.key].internal + formData.marks[subject.key].external}</b></span>
+                  <span>Pass $\ge$ 50</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="form-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => navigate(isFacultyMode ? '/faculty/students' : '/admin/students')}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading
+              ? 'Saving...'
+              : isFacultyMode
+                ? 'Update Marks'
+                : isEditing
+                  ? 'Update Student Record'
+                  : 'Create Student Record'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+export default AddEditStudent;
