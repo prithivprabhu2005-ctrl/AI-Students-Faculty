@@ -2,22 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import Spinner from './Spinner';
 
-const DEFAULT_SUBJECTS = [
-  { key: 'english', label: 'English' },
-  { key: 'mathematics', label: 'Mathematics' },
-  { key: 'programming', label: 'Programming' },
-  { key: 'database', label: 'Database' },
-  { key: 'operatingSystems', label: 'Operating Systems' },
-  { key: 'computerNetworks', label: 'Computer Networks' }
-];
+const DEPARTMENTS = ['CSE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT', 'AI&DS'];
+const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 const ReportsExport = ({ userRole }) => {
   const [reportType, setReportType] = useState('department');
   const [department, setDepartment] = useState('');
   const [semester, setSemester] = useState('');
-  const [subject, setSubject] = useState('mathematics');
+  const [subject, setSubject] = useState('');
   const [batchYear, setBatchYear] = useState('');
-  const [dbSubjects, setDbSubjects] = useState(DEFAULT_SUBJECTS);
+  const [dbSubjects, setDbSubjects] = useState([]);
 
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,23 +22,9 @@ const ReportsExport = ({ userRole }) => {
       try {
         const { data } = await api.get('/academic/subjects');
         const list = data.subjects || [];
-        const combined = [...DEFAULT_SUBJECTS];
-        const existingNames = new Set(DEFAULT_SUBJECTS.map(s => s.label.toLowerCase()));
-
-        list.forEach(s => {
-          const name = (s.subjectName || s.subjectCode || '').trim();
-          if (name && !existingNames.has(name.toLowerCase())) {
-            existingNames.add(name.toLowerCase());
-            combined.push({
-              key: s.subjectName || s.subjectCode,
-              label: s.subjectCode ? `${s.subjectCode} - ${s.subjectName}` : s.subjectName
-            });
-          }
-        });
-
-        setDbSubjects(combined);
-        if (combined.length > 0) {
-          setSubject(combined[0].key);
+        setDbSubjects(list);
+        if (list.length > 0) {
+          setSubject(list[0].subjectName || list[0].subjectCode);
         }
       } catch (err) {
         console.error('Error loading subjects for reports export:', err);
@@ -165,7 +145,12 @@ const ReportsExport = ({ userRole }) => {
             <div className="form-group">
               <label>Select Subject</label>
               <select className="form-control" value={subject} onChange={e => setSubject(e.target.value)}>
-                {dbSubjects.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                {dbSubjects.length === 0 && <option value="">No subjects available</option>}
+                {dbSubjects.map(s => (
+                  <option key={s._id} value={s.subjectName || s.subjectCode}>
+                    {s.subjectCode ? `${s.subjectCode} - ${s.subjectName}` : s.subjectName}
+                  </option>
+                ))}
               </select>
             </div>
           )}

@@ -49,16 +49,6 @@ function getLevenshteinDistance(a, b) {
  */
 async function detectSubject(text) {
   const t = (text || '').toLowerCase();
-  
-  // Check default subjects first
-  if (/\b(math|maths|mathematics|mat)\b/i.test(t)) return 'mathematics';
-  if (/\b(db|database|sql|dbms)\b/i.test(t)) return 'database';
-  if (/\b(os|operating system|operating systems)\b/i.test(t)) return 'operatingSystems';
-  if (/\b(cn|network|networks|computer network|computer networks)\b/i.test(t)) return 'computerNetworks';
-  if (/\b(prog|programming|python|coding|code|c\+\+)\b/i.test(t)) return 'programming';
-  if (/\b(eng|english)\b/i.test(t)) return 'english';
-
-  // Check dynamic MongoDB subjects
   try {
     const activeSubjects = await Subject.find({ isActive: true }).lean();
     for (const sub of activeSubjects) {

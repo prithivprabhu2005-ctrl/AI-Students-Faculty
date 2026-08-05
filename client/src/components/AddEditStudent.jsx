@@ -4,22 +4,13 @@ import Spinner from './Spinner';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
-const DEFAULT_SUBJECTS = [
-  { key: 'english', label: 'English', subjectName: 'English' },
-  { key: 'mathematics', label: 'Mathematics', subjectName: 'Mathematics' },
-  { key: 'programming', label: 'Programming', subjectName: 'Programming' },
-  { key: 'database', label: 'Database', subjectName: 'Database' },
-  { key: 'operatingSystems', label: 'Operating Systems', subjectName: 'Operating Systems' },
-  { key: 'computerNetworks', label: 'Computer Networks', subjectName: 'Computer Networks' }
-];
-
 const AddEditStudent = ({ mode = 'admin' }) => {
   const navigate = useNavigate();
   const { id: editingStudentId } = useParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
-  const [subjectsList, setSubjectsList] = useState(DEFAULT_SUBJECTS);
+  const [dbSubjects, setDbSubjects] = useState([]);
   const [formData, setFormData] = useState({
     studentId: '',
     registerNumber: '',
@@ -45,40 +36,15 @@ const AddEditStudent = ({ mode = 'admin' }) => {
     const loadSubjectsAndStudent = async () => {
       try {
         setFetching(true);
-        // Fetch active subjects dynamically from MongoDB
-        let dbSubjects = [];
-        try {
-          const { data: subRes } = await api.get('/academic/subjects');
-          dbSubjects = subRes.subjects || [];
-        } catch (subErr) {
-          console.warn('Could not load subjects from DB, using default list:', subErr);
-        }
-
-        // Build combined subjects list: Default subjects first, followed by new MongoDB subjects without duplicates
-        const combined = [...DEFAULT_SUBJECTS];
-        const existingNames = new Set(DEFAULT_SUBJECTS.map(s => s.subjectName.toLowerCase()));
-
-        dbSubjects.forEach(s => {
-          const name = (s.subjectName || s.subjectCode || '').trim();
-          if (name && !existingNames.has(name.toLowerCase())) {
-            existingNames.add(name.toLowerCase());
-            combined.push({
-              key: s.subjectName || s.subjectCode,
-              label: s.subjectCode ? `${s.subjectCode} - ${s.subjectName}` : s.subjectName,
-              subjectName: s.subjectName,
-              subjectCode: s.subjectCode,
-              department: s.department,
-              semester: s.semester,
-              _id: s._id
-            });
-          }
-        });
-
-        setSubjectsList(combined);
+        // Fetch active subjects dynamically ONLY from MongoDB
+        const { data: subRes } = await api.get('/academic/subjects');
+        const activeSubjects = subRes.subjects || [];
+        setDbSubjects(activeSubjects);
 
         const initialMarks = {};
-        combined.forEach(s => {
-          initialMarks[s.key] = { internal: 0, external: 0 };
+        activeSubjects.forEach(s => {
+          const key = s.subjectName || s.subjectCode;
+          initialMarks[key] = { internal: 0, external: 0 };
         });
 
         if (editingStudentId) {
@@ -88,10 +54,9 @@ const AddEditStudent = ({ mode = 'admin' }) => {
           const formattedDob = student.dob ? new Date(student.dob).toISOString().split('T')[0] : '';
           
           const loadedMarks = {};
-          combined.forEach(s => {
-            const key = s.key;
-            const existing = student.marks?.[key] || 
-                             student.marks?.[s.subjectName] || 
+          activeSubjects.forEach(s => {
+            const key = s.subjectName || s.subjectCode;
+            const existing = student.marks?.[s.subjectName] || 
                              student.marks?.[s.subjectCode] || 
                              student.marks?.[s._id] || 
                              { internal: 0, external: 0 };
@@ -401,16 +366,16 @@ const AddEditStudent = ({ mode = 'admin' }) => {
         {/* Section 2: Subject Marks */}
         <div>
           <div className="form-section-title">Academic Subject Marks</div>
-          {subjectsList.length === 0 ? (
+          {dbSubjects.length === 0 ? (
             <div style={{ padding: '1.5rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
               No subjects available. Please add subjects from Subject Management.
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
-              {subjectsList.map(subject => {
-                const subKey = subject.key;
+              {dbSubjects.map(subject => {
+                const subKey = subject.subjectName || subject.subjectCode;
                 const m = formData.marks[subKey] || { internal: 0, external: 0 };
-                const displayName = subject.label || subject.subjectName || subject.key;
+                const displayName = subject.subjectCode ? `${subject.subjectCode} - ${subject.subjectName}` : subject.subjectName;
                 return (
                   <div
                     key={subject._id || subKey}
