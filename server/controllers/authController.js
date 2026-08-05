@@ -160,13 +160,13 @@ exports.register = async (req, res) => {
       });
 
       if (!existingStudent) {
-        const defaultMarks = {
-          internal: 30,
-          external: 45,
-          total: 75,
-          grade: 'B',
-          result: 'Pass'
-        };
+        const Subject = require('../models/Subject');
+        const activeSubjects = await Subject.find({ isActive: true });
+        const initialMarks = {};
+        activeSubjects.forEach(s => {
+          initialMarks[s.subjectName] = { internal: 0, external: 0 };
+        });
+
         await Student.create({
           studentId: autoStudentId,
           registerNumber: finalRegNum,
@@ -181,14 +181,7 @@ exports.register = async (req, res) => {
           phone: phone ? phone.trim() : '0000000000',
           email: email.toLowerCase().trim(),
           address: req.body.address || 'College Campus',
-          marks: {
-            english: defaultMarks,
-            mathematics: defaultMarks,
-            programming: defaultMarks,
-            database: defaultMarks,
-            operatingSystems: defaultMarks,
-            computerNetworks: defaultMarks
-          }
+          marks: initialMarks
         });
         await Student.recalculateRanks();
       }

@@ -66,16 +66,30 @@ exports.generateReport = async (req, res) => {
         result: s.result
       }));
     } else if (reportType === 'subject') {
-      const subKey = subject || 'mathematics';
       const students = await Student.find(filter).lean();
-      reportData.title = `Subject Evaluation Report – ${subKey.toUpperCase()}`;
+      let targetSubjectName = subject || 'Subject';
+      if (subject) {
+        const foundSub = await Subject.findOne({
+          $or: [
+            { subjectCode: subject.toUpperCase() },
+            { subjectName: new RegExp(`^${subject}$`, 'i') }
+          ]
+        }).lean();
+        if (foundSub) targetSubjectName = `${foundSub.subjectCode} - ${foundSub.subjectName}`;
+      }
+
+      reportData.title = `Subject Evaluation Report – ${targetSubjectName.toUpperCase()}`;
       reportData.rows = students.map(s => {
-        const m = s.marks?.[subKey] || {};
+        let m = {};
+        if (s.marks) {
+          const matchedKey = Object.keys(s.marks).find(k => k.toLowerCase() === (subject || '').toLowerCase());
+          m = s.marks[matchedKey || subject] || {};
+        }
         return {
           registerNumber: s.registerNumber,
           name: s.name,
           department: s.department,
-          subject: subKey,
+          subject: targetSubjectName,
           internal: m.internal || 0,
           external: m.external || 0,
           total: m.total || 0,

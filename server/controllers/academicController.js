@@ -143,6 +143,21 @@ exports.deleteSubject = async (req, res) => {
       return res.status(404).json({ message: 'Subject not found.' });
     }
 
+    // Unset subject from all student marks and recalculate academic stats
+    const unsetObj = {};
+    if (subject.subjectCode) unsetObj[`marks.${subject.subjectCode}`] = 1;
+    if (subject.subjectCode) unsetObj[`marks.${subject.subjectCode.toLowerCase()}`] = 1;
+    if (subject._id) unsetObj[`marks.${subject._id}`] = 1;
+
+    await Student.updateMany({}, { $unset: unsetObj });
+
+    // Trigger save on all students to recalculate averages/CGPA after subject removal
+    const students = await Student.find();
+    for (const student of students) {
+      await student.save();
+    }
+    await Student.recalculateRanks();
+
     res.json({ message: 'Subject deleted successfully.' });
   } catch (error) {
     console.error('Error deleting subject:', error);

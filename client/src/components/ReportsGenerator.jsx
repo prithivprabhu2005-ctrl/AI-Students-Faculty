@@ -2,13 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import Spinner from './Spinner';
 
-const DEPARTMENTS = ['CSE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT', 'AI&DS'];
-const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8];
-const SUBJECTS = [
+const DEFAULT_SUBJECTS = [
   { key: 'english', label: 'English' },
   { key: 'mathematics', label: 'Mathematics' },
   { key: 'programming', label: 'Programming' },
-  { key: 'database', label: 'Database Systems' },
+  { key: 'database', label: 'Database' },
   { key: 'operatingSystems', label: 'Operating Systems' },
   { key: 'computerNetworks', label: 'Computer Networks' }
 ];
@@ -19,10 +17,41 @@ const ReportsGenerator = ({ userRole }) => {
   const [semester, setSemester] = useState('');
   const [subject, setSubject] = useState('mathematics');
   const [batchYear, setBatchYear] = useState('');
+  const [dbSubjects, setDbSubjects] = useState(DEFAULT_SUBJECTS);
 
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const loadSubjects = async () => {
+      try {
+        const { data } = await api.get('/academic/subjects');
+        const list = data.subjects || [];
+        const combined = [...DEFAULT_SUBJECTS];
+        const existingNames = new Set(DEFAULT_SUBJECTS.map(s => s.label.toLowerCase()));
+
+        list.forEach(s => {
+          const name = (s.subjectName || s.subjectCode || '').trim();
+          if (name && !existingNames.has(name.toLowerCase())) {
+            existingNames.add(name.toLowerCase());
+            combined.push({
+              key: s.subjectName || s.subjectCode,
+              label: s.subjectCode ? `${s.subjectCode} - ${s.subjectName}` : s.subjectName
+            });
+          }
+        });
+
+        setDbSubjects(combined);
+        if (combined.length > 0) {
+          setSubject(combined[0].key);
+        }
+      } catch (err) {
+        console.error('Error loading subjects for reports generator:', err);
+      }
+    };
+    loadSubjects();
+  }, []);
 
   const fetchReport = useCallback(async () => {
     try {
@@ -58,11 +87,11 @@ const ReportsGenerator = ({ userRole }) => {
       {/* Header */}
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1>📄 Performance Reports Generator</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Generate and export official academic reports filtered by department, semester, subject, or batch.</p>
+          <h1>📊 Performance Reports Generator</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Generate and print detailed department, semester, subject, faculty, and student reports.</p>
         </div>
         <button className="btn btn-primary" onClick={handlePrint}>
-          🖨️ Print / Export Report
+          🖨️ Print / Save PDF
         </button>
       </div>
 
@@ -103,7 +132,7 @@ const ReportsGenerator = ({ userRole }) => {
             <div className="form-group">
               <label>Select Subject</label>
               <select className="form-control" value={subject} onChange={e => setSubject(e.target.value)}>
-                {SUBJECTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                {dbSubjects.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
             </div>
           )}

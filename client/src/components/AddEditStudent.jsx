@@ -4,12 +4,22 @@ import Spinner from './Spinner';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
+const DEFAULT_SUBJECTS = [
+  { key: 'english', label: 'English', subjectName: 'English' },
+  { key: 'mathematics', label: 'Mathematics', subjectName: 'Mathematics' },
+  { key: 'programming', label: 'Programming', subjectName: 'Programming' },
+  { key: 'database', label: 'Database', subjectName: 'Database' },
+  { key: 'operatingSystems', label: 'Operating Systems', subjectName: 'Operating Systems' },
+  { key: 'computerNetworks', label: 'Computer Networks', subjectName: 'Computer Networks' }
+];
+
 const AddEditStudent = ({ mode = 'admin' }) => {
   const navigate = useNavigate();
   const { id: editingStudentId } = useParams();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [subjectsList, setSubjectsList] = useState(DEFAULT_SUBJECTS);
   const [formData, setFormData] = useState({
     studentId: '',
     registerNumber: '',
@@ -24,39 +34,74 @@ const AddEditStudent = ({ mode = 'admin' }) => {
     phone: '',
     email: '',
     address: '',
-    marks: {
-      english: { internal: 0, external: 0 },
-      mathematics: { internal: 0, external: 0 },
-      programming: { internal: 0, external: 0 },
-      database: { internal: 0, external: 0 },
-      operatingSystems: { internal: 0, external: 0 },
-      computerNetworks: { internal: 0, external: 0 }
-    }
+    marks: {}
   });
 
   const departments = ['CSE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT', 'AI&DS'];
   const isFacultyMode = mode === 'faculty';
   const isEditing = Boolean(editingStudentId);
-  const subjects = [
-    { key: 'english', label: 'English' },
-    { key: 'mathematics', label: 'Mathematics' },
-    { key: 'programming', label: 'Programming' },
-    { key: 'database', label: 'Database' },
-    { key: 'operatingSystems', label: 'Operating Systems' },
-    { key: 'computerNetworks', label: 'Computer Networks' }
-  ];
 
   useEffect(() => {
-    if (editingStudentId) {
-      const fetchStudentDetails = async () => {
+    const loadSubjectsAndStudent = async () => {
+      try {
+        setFetching(true);
+        // Fetch active subjects dynamically from MongoDB
+        let dbSubjects = [];
         try {
-          setFetching(true);
+          const { data: subRes } = await api.get('/academic/subjects');
+          dbSubjects = subRes.subjects || [];
+        } catch (subErr) {
+          console.warn('Could not load subjects from DB, using default list:', subErr);
+        }
+
+        // Build combined subjects list: Default subjects first, followed by new MongoDB subjects without duplicates
+        const combined = [...DEFAULT_SUBJECTS];
+        const existingNames = new Set(DEFAULT_SUBJECTS.map(s => s.subjectName.toLowerCase()));
+
+        dbSubjects.forEach(s => {
+          const name = (s.subjectName || s.subjectCode || '').trim();
+          if (name && !existingNames.has(name.toLowerCase())) {
+            existingNames.add(name.toLowerCase());
+            combined.push({
+              key: s.subjectName || s.subjectCode,
+              label: s.subjectCode ? `${s.subjectCode} - ${s.subjectName}` : s.subjectName,
+              subjectName: s.subjectName,
+              subjectCode: s.subjectCode,
+              department: s.department,
+              semester: s.semester,
+              _id: s._id
+            });
+          }
+        });
+
+        setSubjectsList(combined);
+
+        const initialMarks = {};
+        combined.forEach(s => {
+          initialMarks[s.key] = { internal: 0, external: 0 };
+        });
+
+        if (editingStudentId) {
           const response = await api.get(`/students/${editingStudentId}`);
           const student = response.data;
           
-          // Format dob string to YYYY-MM-DD for date input
           const formattedDob = student.dob ? new Date(student.dob).toISOString().split('T')[0] : '';
           
+          const loadedMarks = {};
+          combined.forEach(s => {
+            const key = s.key;
+            const existing = student.marks?.[key] || 
+                             student.marks?.[s.subjectName] || 
+                             student.marks?.[s.subjectCode] || 
+                             student.marks?.[s._id] || 
+                             { internal: 0, external: 0 };
+            const existingVal = typeof existing === 'number' ? { internal: 0, external: existing } : existing;
+            loadedMarks[key] = {
+              internal: existingVal.internal || 0,
+              external: existingVal.external || 0
+            };
+          });
+
           setFormData({
             studentId: student.studentId || '',
             registerNumber: student.registerNumber || '',
@@ -71,26 +116,26 @@ const AddEditStudent = ({ mode = 'admin' }) => {
             phone: student.phone || '',
             email: student.email || '',
             address: student.address || '',
-            marks: {
-              english: { internal: student.marks.english.internal, external: student.marks.english.external },
-              mathematics: { internal: student.marks.mathematics.internal, external: student.marks.mathematics.external },
-              programming: { internal: student.marks.programming.internal, external: student.marks.programming.external },
-              database: { internal: student.marks.database.internal, external: student.marks.database.external },
-              operatingSystems: { internal: student.marks.operatingSystems.internal, external: student.marks.operatingSystems.external },
-              computerNetworks: { internal: student.marks.computerNetworks.internal, external: student.marks.computerNetworks.external }
-            }
+            marks: loadedMarks
           });
-        } catch (err) {
-          console.error('Error fetching student details:', err);
-          alert('Failed to load student details for editing.');
-          navigate(isFacultyMode ? '/faculty/students' : '/admin/students');
-        } finally {
-          setFetching(false);
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            marks: initialMarks
+          }));
         }
-      };
+      } catch (err) {
+        console.error('Error fetching subjects or student details:', err);
+        alert('Failed to load student details.');
+        if (editingStudentId) {
+          navigate(isFacultyMode ? '/faculty/students' : '/admin/students');
+        }
+      } finally {
+        setFetching(false);
+      }
+    };
 
-      fetchStudentDetails();
-    }
+    loadSubjectsAndStudent();
   }, [editingStudentId, isFacultyMode, navigate]);
 
   const handleChange = (e) => {
@@ -356,52 +401,65 @@ const AddEditStudent = ({ mode = 'admin' }) => {
         {/* Section 2: Subject Marks */}
         <div>
           <div className="form-section-title">Academic Subject Marks</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
-            {subjects.map(subject => (
-              <div
-                key={subject.key}
-                style={{
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '10px',
-                  padding: '1rem',
-                  backgroundColor: 'rgba(255, 255, 255, 0.01)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem'
-                }}
-              >
-                <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--primary)' }}>{subject.label}</div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>Internal (max 40)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="40"
-                      className="form-control"
-                      value={formData.marks[subject.key].internal}
-                      onChange={(e) => handleMarkChange(subject.key, 'internal', e.target.value)}
-                    />
+          {subjectsList.length === 0 ? (
+            <div style={{ padding: '1.5rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              No subjects available. Please add subjects from Subject Management.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+              {subjectsList.map(subject => {
+                const subKey = subject.key;
+                const m = formData.marks[subKey] || { internal: 0, external: 0 };
+                const displayName = subject.label || subject.subjectName || subject.key;
+                return (
+                  <div
+                    key={subject._id || subKey}
+                    style={{
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '10px',
+                      padding: '1rem',
+                      backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem'
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--primary)' }}>
+                      {displayName}
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      <div className="form-group" style={{ flex: 1 }}>
+                        <label>Internal (max 40)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="40"
+                          className="form-control"
+                          value={m.internal || 0}
+                          onChange={(e) => handleMarkChange(subKey, 'internal', e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group" style={{ flex: 1 }}>
+                        <label>External (max 60)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="60"
+                          className="form-control"
+                          value={m.external || 0}
+                          onChange={(e) => handleMarkChange(subKey, 'external', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Subtotal: <b>{(m.internal || 0) + (m.external || 0)}</b></span>
+                      <span>Pass $\ge$ 50</span>
+                    </div>
                   </div>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>External (max 60)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="60"
-                      className="form-control"
-                      value={formData.marks[subject.key].external}
-                      onChange={(e) => handleMarkChange(subject.key, 'external', e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Subtotal: <b>{formData.marks[subject.key].internal + formData.marks[subject.key].external}</b></span>
-                  <span>Pass $\ge$ 50</span>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Actions */}

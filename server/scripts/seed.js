@@ -97,6 +97,9 @@ const seedDatabase = async () => {
     // e.g. deptRegCounters['23CSE'] = 1, 2, 3...
     const deptRegCounters = {};
 
+    const Subject = require('../models/Subject');
+    const existingSubjects = await Subject.find({ isActive: true });
+
     for (let i = 0; i < 300; i++) {
       const gender = Math.random() > 0.5 ? 'Male' : 'Female';
       const firstName = gender === 'Male' 
@@ -128,13 +131,11 @@ const seedDatabase = async () => {
       const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}@college.edu`;
       const address = `${Math.floor(10 + Math.random() * 150)}, ${['Gandhi Street', 'Nehru Nagar', 'Anna Salai', 'Temple Road', 'Kamaraj Street'][Math.floor(Math.random() * 5)]}, Chennai - 6000${Math.floor(10 + Math.random() * 80)}`;
 
-      // Determine marks profile (topper, fail, average)
-      // Make student #0 overall college topper, and #1 and #2 guaranteed fails to test filters
       let profile = 'average';
       if (i === 0) {
-        profile = 'topper'; // Guaranteed super topper
+        profile = 'topper';
       } else if (i === 1 || i === 2) {
-        profile = 'fail'; // Guaranteed failures
+        profile = 'fail';
       } else {
         const rand = Math.random();
         if (rand < 0.08) {
@@ -144,36 +145,14 @@ const seedDatabase = async () => {
         }
       }
 
-      const generateSubjectMarks = () => {
-        const marks = getRandomMark(profile);
-        // Sometimes toppers fail a single subject or average fails one
-        // If we want a few fail marks, let's inject it randomly
-        return marks;
-      };
+      const generateSubjectMarks = () => getRandomMark(profile);
 
-      // To make the super topper outstanding, set mathematics to 100
-      let mathMarks = generateSubjectMarks();
-      if (i === 0) {
-        mathMarks = { internal: 40, external: 60 }; // 100
-      }
-
-      const studentMarks = {
-        english: generateSubjectMarks(),
-        mathematics: mathMarks,
-        programming: generateSubjectMarks(),
-        database: generateSubjectMarks(),
-        operatingSystems: generateSubjectMarks(),
-        computerNetworks: generateSubjectMarks()
-      };
-
-      // For the super topper, make sure they have top marks across all subjects
-      if (i === 0) {
-        studentMarks.english = { internal: 38, external: 57 }; // 95
-        studentMarks.programming = { internal: 39, external: 59 }; // 98
-        studentMarks.database = { internal: 40, external: 59 }; // 99
-        studentMarks.operatingSystems = { internal: 38, external: 58 }; // 96
-        studentMarks.computerNetworks = { internal: 39, external: 58 }; // 97
-      }
+      const studentMarks = {};
+      existingSubjects.forEach(subDoc => {
+        studentMarks[subDoc.subjectCode] = (i === 0 && profile === 'topper')
+          ? { internal: 38, external: 58 }
+          : generateSubjectMarks();
+      });
 
       studentsData.push({
         studentId,

@@ -145,7 +145,7 @@ exports.getAIInsights = async (req, res) => {
       {
         category: 'Overall Performance Suggestion',
         type: 'warning',
-        text: 'Provide targeted tutoring in Mathematics and Database Systems to raise pass rates above 90%.'
+        text: 'Provide targeted tutoring and academic support in core subjects to raise pass rates above 90%.'
       }
     ];
 

@@ -24,14 +24,7 @@ const studentSchema = new mongoose.Schema({
   address: { type: String, required: true },
   photoUrl: { type: String, default: '' },
   
-  marks: {
-    english: { type: subjectMarkSchema, required: true },
-    mathematics: { type: subjectMarkSchema, required: true },
-    programming: { type: subjectMarkSchema, required: true },
-    database: { type: subjectMarkSchema, required: true },
-    operatingSystems: { type: subjectMarkSchema, required: true },
-    computerNetworks: { type: subjectMarkSchema, required: true }
-  },
+  marks: { type: mongoose.Schema.Types.Mixed, default: {} },
 
   totalMarks: { type: Number, default: 0 },
   averageMarks: { type: Number, default: 0 },
@@ -39,26 +32,46 @@ const studentSchema = new mongoose.Schema({
   cgpa: { type: Number, default: 0 },
   rank: { type: Number, default: 0 },
   arrears: { type: Number, default: 0 },
-  result: { type: String, default: 'Fail' }
+  result: { type: String, default: 'Pass' }
 }, {
   timestamps: true
 });
 
-// Pre-save hook to calculate all academic totals and averages
+// Pre-save hook to calculate all academic totals and averages dynamically
 studentSchema.pre('save', function (next) {
-  const subjects = ['english', 'mathematics', 'programming', 'database', 'operatingSystems', 'computerNetworks'];
-  
+  const marksObj = this.marks || {};
+  const subjectKeys = Object.keys(marksObj);
+  const N = subjectKeys.length;
+
   let overallTotal = 0;
   let totalGradePoints = 0;
   let failCount = 0;
 
-  subjects.forEach(subKey => {
-    const sub = this.marks[subKey];
-    // Calculate total marks for the subject
-    sub.total = (sub.internal || 0) + (sub.external || 0);
+  if (N === 0) {
+    this.totalMarks = 0;
+    this.averageMarks = 0;
+    this.percentage = 0;
+    this.cgpa = 0;
+    this.arrears = 0;
+    this.result = 'Pass';
+    return next();
+  }
+
+  subjectKeys.forEach(subKey => {
+    let sub = marksObj[subKey];
+    if (typeof sub === 'number') {
+      sub = { internal: 0, external: sub, total: sub };
+      marksObj[subKey] = sub;
+    } else if (!sub || typeof sub !== 'object') {
+      sub = { internal: 0, external: 0, total: 0 };
+      marksObj[subKey] = sub;
+    }
+
+    sub.internal = Number(sub.internal || 0);
+    sub.external = Number(sub.external || 0);
+    sub.total = sub.total !== undefined && typeof marksObj[subKey] === 'number' ? Number(marksObj[subKey]) : (sub.internal + sub.external);
     overallTotal += sub.total;
 
-    // Grade and pass/fail calculations per subject
     if (sub.total >= 90) {
       sub.grade = 'O';
       totalGradePoints += 10;
@@ -87,10 +100,11 @@ studentSchema.pre('save', function (next) {
     }
   });
 
+  this.markModified('marks');
   this.totalMarks = overallTotal;
-  this.averageMarks = Number((overallTotal / subjects.length).toFixed(2));
-  this.percentage = Number((overallTotal / 600 * 100).toFixed(2));
-  this.cgpa = Number((totalGradePoints / subjects.length).toFixed(2));
+  this.averageMarks = Number((overallTotal / N).toFixed(2));
+  this.percentage = Number((overallTotal / (N * 100) * 100).toFixed(2));
+  this.cgpa = Number((totalGradePoints / N).toFixed(2));
   this.arrears = failCount;
   this.result = failCount > 0 ? 'Fail' : 'Pass';
 

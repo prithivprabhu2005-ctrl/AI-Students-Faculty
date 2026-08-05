@@ -1,4 +1,5 @@
 const Student = require('../models/Student');
+const Subject = require('../models/Subject');
 const Attendance = require('../models/Attendance');
 const Assignment = require('../models/Assignment');
 const llmService = require('./llmService');
@@ -44,22 +45,31 @@ function getLevenshteinDistance(a, b) {
 }
 
 /**
- * Subject detection with exact synonym mapping:
- * - math, maths, mathematics -> mathematics
- * - db, database, sql, dbms -> database
- * - os, operating system, operating systems -> operatingSystems
- * - cn, network, networks, computer networks -> computerNetworks
- * - prog, programming, python, coding, code -> programming
- * - eng, english -> english
+ * Subject detection using active Subject documents from MongoDB
  */
-function detectSubject(text) {
+async function detectSubject(text) {
   const t = (text || '').toLowerCase();
+  
+  // Check default subjects first
   if (/\b(math|maths|mathematics|mat)\b/i.test(t)) return 'mathematics';
   if (/\b(db|database|sql|dbms)\b/i.test(t)) return 'database';
   if (/\b(os|operating system|operating systems)\b/i.test(t)) return 'operatingSystems';
   if (/\b(cn|network|networks|computer network|computer networks)\b/i.test(t)) return 'computerNetworks';
   if (/\b(prog|programming|python|coding|code|c\+\+)\b/i.test(t)) return 'programming';
   if (/\b(eng|english)\b/i.test(t)) return 'english';
+
+  // Check dynamic MongoDB subjects
+  try {
+    const activeSubjects = await Subject.find({ isActive: true }).lean();
+    for (const sub of activeSubjects) {
+      const code = (sub.subjectCode || '').toLowerCase();
+      const name = (sub.subjectName || '').toLowerCase();
+      if (code && t.includes(code)) return sub.subjectName || sub.subjectCode;
+      if (name && t.includes(name)) return sub.subjectName || sub.subjectCode;
+    }
+  } catch (err) {
+    console.error('Error detecting subject from DB:', err);
+  }
   return null;
 }
 
@@ -103,10 +113,6 @@ const IGNORE_WORDS = new Set([
   // Academic & Module 2 terms
   'attendance', 'assignment', 'assignments', 'class', 'classes', 'present', 'absent',
   'student', 'students', 'studentoda', 'department', 'dept', 'sem', 'semester', 'batch', 'year', 'section',
-  // Subject keywords
-  'math', 'maths', 'mathematics', 'mat', 'db', 'database', 'sql', 'dbms',
-  'os', 'operating', 'system', 'systems', 'cn', 'network', 'networks', 'computer',
-  'prog', 'programming', 'code', 'coding', 'python', 'java', 'eng', 'english',
   // Tanglish / Tamil fillers & pronouns
   'oda', 'sollu', 'solu', 'solunga', 'evlo', 'evvalavu', 'ethanai', 'ethini', 'enna',
   'ah', 'nu', 'da', 'pa', 'ku', 'avanoda', 'avan', 'avaloda', 'aval', 'ithu', 'idhu',
@@ -140,6 +146,15 @@ function extractNameFromMessage(message) {
  */
 function formatStudentData(s) {
   if (!s) return null;
+  const formattedMarks = {};
+  if (s.marks) {
+    Object.keys(s.marks).forEach(k => {
+      const m = s.marks[k];
+      if (m) {
+        formattedMarks[k] = { total: m.total, grade: m.grade, result: m.result };
+      }
+    });
+  }
   return {
     registerNumber: s.registerNumber,
     name: s.name,
@@ -155,14 +170,7 @@ function formatStudentData(s) {
     percentage: s.percentage,
     arrears: s.arrears,
     result: s.result,
-    marks: s.marks ? {
-      english: s.marks.english ? { total: s.marks.english.total, grade: s.marks.english.grade, result: s.marks.english.result } : undefined,
-      mathematics: s.marks.mathematics ? { total: s.marks.mathematics.total, grade: s.marks.mathematics.grade, result: s.marks.mathematics.result } : undefined,
-      programming: s.marks.programming ? { total: s.marks.programming.total, grade: s.marks.programming.grade, result: s.marks.programming.result } : undefined,
-      database: s.marks.database ? { total: s.marks.database.total, grade: s.marks.database.grade, result: s.marks.database.result } : undefined,
-      operatingSystems: s.marks.operatingSystems ? { total: s.marks.operatingSystems.total, grade: s.marks.operatingSystems.grade, result: s.marks.operatingSystems.result } : undefined,
-      computerNetworks: s.marks.computerNetworks ? { total: s.marks.computerNetworks.total, grade: s.marks.computerNetworks.grade, result: s.marks.computerNetworks.result } : undefined
-    } : undefined
+    marks: formattedMarks
   };
 }
 
@@ -348,7 +356,7 @@ async function processNLQ(message, contextRegNo = null) {
 
     // Detect Department, Subject, and Gender
     const detectedDept = detectDepartment(lowerMsg);
-    const detectedSubject = detectSubject(lowerMsg);
+    const detectedSubject = await detectSubject(lowerMsg);
     const detectedGender = detectGender(lowerMsg);
 
     // 1. Direct Register Number or Student ID exact search (e.g. 21CS045 or S1001)
@@ -412,13 +420,18 @@ async function processNLQ(message, contextRegNo = null) {
 
     // 4. Centum / 100 Marks Query
     if (!queryHandled && (lowerMsg.includes('100') || lowerMsg.includes('full mark') || lowerMsg.includes('centum'))) {
-      const subject = detectedSubject || 'mathematics';
-      const queryCond = {};
-      queryCond[`marks.${subject}.total`] = 100;
-      const centumList = await Student.find(queryCond).limit(10).lean();
+      const subject = detectedSubject;
+      let centumList = [];
+      if (subject) {
+        const queryCond = {};
+        queryCond[`marks.${subject}.total`] = 100;
+        centumList = await Student.find(queryCond).limit(10).lean();
+      } else {
+        centumList = await Student.find({ percentage: 100 }).limit(10).lean();
+      }
       dbContextData = {
         intent: "SUBJECT_CENTUM_STUDENTS",
-        subject,
+        subject: subject || "Overall",
         count: centumList.length,
         students: centumList.map(s => formatStudentData(s))
       };

@@ -19,15 +19,13 @@ const Chatbot = () => {
   const presetQueries = [
     'Who is the college topper?',
     'Show his marks.',
-    'Who failed Programming?',
     'Who is the ECE topper?',
     'Show ECE students with CGPA above 8.5',
     'How many girls are in IT?',
-    'Who scored 100 in Mathematics?',
     'Show students with arrears.',
     'Show all students with distinction.',
-    'Who is the CM of Tamil Nadu?',
-    'What is Python?'
+    'Show department pass percentage statistics',
+    'Who has 0 arrears?'
   ];
 
   // Auto scroll to bottom
@@ -182,7 +180,7 @@ const Chatbot = () => {
             <input
               type="text"
               className="chat-input"
-              placeholder="Ask an academic question (e.g. Who failed Programming?)..."
+              placeholder="Ask an academic question (e.g. Who is the college topper?)..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={loading}

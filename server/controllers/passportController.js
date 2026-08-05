@@ -122,6 +122,10 @@ exports.getStudentPassport = async (req, res) => {
     // Compute Profile Completion Percentage
     const profileCompletion = computeProfileCompletion(student, portfolio, attPct, assignPct);
 
+    const Subject = require('../models/Subject');
+    const totalActiveSubjects = await Subject.countDocuments({ isActive: true });
+    const totalPossibleMarks = totalActiveSubjects * 100;
+
     // Structure Passport Data
     const passportData = {
       personalInformation: {
@@ -144,6 +148,7 @@ exports.getStudentPassport = async (req, res) => {
         cgpa: student.cgpa,
         percentage: student.percentage,
         totalMarks: student.totalMarks,
+        totalPossibleMarks,
         averageMarks: student.averageMarks,
         attendancePercentage: attPct,
         assignmentScore: assignPct,

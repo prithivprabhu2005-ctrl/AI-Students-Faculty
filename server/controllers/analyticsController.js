@@ -103,21 +103,13 @@ exports.getAdminAnalytics = async (req, res) => {
     ]);
 
     // 5. Subject-wise Pass/Fail Performance
-    const subjectsList = ['english', 'mathematics', 'programming', 'database', 'operatingSystems', 'computerNetworks'];
-    const subjectLabels = {
-      english: 'English',
-      mathematics: 'Mathematics',
-      programming: 'Programming',
-      database: 'Database Systems',
-      operatingSystems: 'Operating Systems',
-      computerNetworks: 'Computer Networks'
-    };
-
+    const activeSubjects = await Subject.find({ isActive: true }).lean();
     const studentsAll = await Student.find().select('marks').lean();
-    const subjectStats = subjectsList.map(key => {
+    const subjectStats = activeSubjects.map(subDoc => {
+      const key = subDoc.subjectCode;
       let pass = 0, fail = 0, totalMarksSum = 0, count = 0;
       studentsAll.forEach(st => {
-        const m = st.marks?.[key];
+        const m = st.marks?.[key] || st.marks?.[subDoc._id.toString()];
         if (m && m.total !== undefined) {
           count++;
           totalMarksSum += m.total;
@@ -129,7 +121,7 @@ exports.getAdminAnalytics = async (req, res) => {
       const total = count || 1;
       return {
         subjectKey: key,
-        subjectName: subjectLabels[key],
+        subjectName: `${subDoc.subjectCode} - ${subDoc.subjectName}`,
         totalEvaluated: count,
         passPercentage: Number(((pass / total) * 100).toFixed(1)),
         failPercentage: Number(((fail / total) * 100).toFixed(1)),
@@ -312,14 +304,13 @@ exports.getStudentAnalytics = async (req, res) => {
     const assignmentAverage = totalMax > 0 ? Number(((totalObtained / totalMax) * 100).toFixed(1)) : 0;
 
     // Subject marks & grades breakdown
-    const subjectLabels = {
-      english: 'English',
-      mathematics: 'Mathematics',
-      programming: 'Programming',
-      database: 'Database Systems',
-      operatingSystems: 'Operating Systems',
-      computerNetworks: 'Computer Networks'
-    };
+    const activeSubjects = await Subject.find().lean();
+    const subMap = {};
+    activeSubjects.forEach(s => {
+      subMap[s.subjectCode] = `${s.subjectCode} - ${s.subjectName}`;
+      if (s.subjectCode) subMap[s.subjectCode.toLowerCase()] = `${s.subjectCode} - ${s.subjectName}`;
+      subMap[s._id.toString()] = `${s.subjectCode} - ${s.subjectName}`;
+    });
 
     const subjectBreakdown = [];
     if (student.marks) {
@@ -328,7 +319,7 @@ exports.getStudentAnalytics = async (req, res) => {
         if (sub && sub.total !== undefined) {
           subjectBreakdown.push({
             key,
-            name: subjectLabels[key] || key,
+            name: subMap[key] || key,
             internal: sub.internal,
             external: sub.external,
             total: sub.total,
@@ -449,14 +440,28 @@ exports.getReports = async (req, res) => {
       };
     } else if (reportType === 'subject') {
       const allSt = await Student.find(filter).lean();
-      const subKey = subject || 'mathematics';
+      let targetSubjectName = subject || 'Subject';
+      if (subject) {
+        const foundSub = await Subject.findOne({
+          $or: [
+            { subjectCode: subject.toUpperCase() },
+            { subjectName: new RegExp(`^${subject}$`, 'i') }
+          ]
+        }).lean();
+        if (foundSub) targetSubjectName = `${foundSub.subjectCode} - ${foundSub.subjectName}`;
+      }
+
       const subStudents = allSt.map(s => {
-        const m = s.marks?.[subKey] || {};
+        let m = {};
+        if (s.marks) {
+          const matchedKey = Object.keys(s.marks).find(k => k.toLowerCase() === (subject || '').toLowerCase());
+          m = s.marks[matchedKey || subject] || {};
+        }
         return {
           registerNumber: s.registerNumber,
           name: s.name,
           department: s.department,
-          subject: subKey,
+          subject: targetSubjectName,
           internal: m.internal || 0,
           external: m.external || 0,
           total: m.total || 0,
@@ -466,7 +471,7 @@ exports.getReports = async (req, res) => {
       });
 
       reportData = {
-        title: `Subject Report – ${subKey.toUpperCase()}`,
+        title: `Subject Report – ${targetSubjectName.toUpperCase()}`,
         filter,
         totalStudents: subStudents.length,
         students: subStudents

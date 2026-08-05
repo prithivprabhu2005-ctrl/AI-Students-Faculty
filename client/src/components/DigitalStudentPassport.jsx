@@ -430,7 +430,9 @@ const DigitalStudentPassport = ({ mode = 'student' }) => {
               <div style={metricChipStyle}>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL MARKS</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800 }}>{passport.academicSummary.totalMarks}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Out of 600</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {passport.academicSummary.totalPossibleMarks ? `Out of ${passport.academicSummary.totalPossibleMarks}` : 'Total Scored'}
+                </div>
               </div>
 
               <div style={metricChipStyle}>

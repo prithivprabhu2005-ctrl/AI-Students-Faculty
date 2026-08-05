@@ -49,20 +49,11 @@ function calculateStudentPrediction(student, attendancePct = 85, assignmentAvg =
     recommendations.push(`Improve Assignment Scores (current ${assignmentAvg}%)`);
   }
 
-  const subjectLabels = {
-    english: 'English',
-    mathematics: 'Mathematics',
-    programming: 'Programming',
-    database: 'Database Systems',
-    operatingSystems: 'Operating Systems',
-    computerNetworks: 'Computer Networks'
-  };
-
   if (student.marks) {
     Object.keys(student.marks).forEach(key => {
       const m = student.marks[key];
       if (m && (m.total < 60 || m.result === 'Fail')) {
-        recommendations.push(`Focus on weak subject: ${subjectLabels[key] || key} (Score: ${m.total}/100)`);
+        recommendations.push(`Focus on weak subject: ${key} (Score: ${m.total}/100)`);
       }
     });
   }
