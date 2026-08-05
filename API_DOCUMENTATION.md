@@ -6,7 +6,7 @@ Comprehensive REST API Specification for Authentication, Student CRUD, Academic 
 
 ## Base URL
 ```
-Development: http://localhost:5000/api
+Development: https://ai-students-faculty.onrender.com/api
 Production:  https://your-domain.onrender.com/api
 ```
 
